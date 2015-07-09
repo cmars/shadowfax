@@ -15,11 +15,13 @@ import (
 	"github.com/cmars/shadowfax/wire"
 )
 
+// Handler handles HTTP requests as a shadowfax server.
 type Handler struct {
 	keyPair sf.KeyPair
 	service entities.Service
 }
 
+// NewHandler returns a new Handler with public key pair and service backend.
 func NewHandler(keyPair sf.KeyPair, service entities.Service) *Handler {
 	return &Handler{
 		keyPair: keyPair,
@@ -27,6 +29,7 @@ func NewHandler(keyPair sf.KeyPair, service entities.Service) *Handler {
 	}
 }
 
+// Register sets up endpoint routing for a shadowfax server.
 func (h *Handler) Register(r *httprouter.Router) {
 	r.GET("/publickey", h.publicKey)
 	r.DELETE("/inbox/:recipient", h.pop)
@@ -61,14 +64,14 @@ func (h *Handler) publicKey(w http.ResponseWriter, r *http.Request, p httprouter
 	w.Write(buf)
 }
 
-type AuthRequest struct {
+type authRequest struct {
 	*Handler
 	ClientKey *sf.PublicKey
 	Nonce     *sf.Nonce
 	Contents  []byte
 }
 
-func (h *Handler) auth(r *http.Request, client string) (*AuthRequest, error) {
+func (h *Handler) auth(r *http.Request, client string) (*authRequest, error) {
 	var msg wire.Message
 	dec := json.NewDecoder(r.Body)
 	err := dec.Decode(&msg)
@@ -91,7 +94,7 @@ func (h *Handler) auth(r *http.Request, client string) (*AuthRequest, error) {
 		return nil, errgo.New("authentication failed")
 	}
 
-	return &AuthRequest{
+	return &authRequest{
 		Handler:   h,
 		ClientKey: clientKey,
 		Nonce:     nonce,
@@ -99,7 +102,7 @@ func (h *Handler) auth(r *http.Request, client string) (*AuthRequest, error) {
 	}, nil
 }
 
-func (a *AuthRequest) resp(w http.ResponseWriter, data interface{}) {
+func (a *authRequest) resp(w http.ResponseWriter, data interface{}) {
 	var msg bytes.Buffer
 
 	enc := json.NewEncoder(&msg)
