@@ -1,4 +1,4 @@
-package handler_test
+package http_test
 
 import (
 	"net/http/httptest"
@@ -8,9 +8,8 @@ import (
 	gc "gopkg.in/check.v1"
 
 	sf "github.com/cmars/shadowfax"
-	"github.com/cmars/shadowfax/client"
 	"github.com/cmars/shadowfax/entities"
-	"github.com/cmars/shadowfax/handler"
+	sfhttp "github.com/cmars/shadowfax/http"
 )
 
 func Test(t *testing.T) { gc.TestingT(t) }
@@ -18,7 +17,7 @@ func Test(t *testing.T) { gc.TestingT(t) }
 type HttpSuite struct {
 	service entities.Service
 	keyPair sf.KeyPair
-	handler *handler.Handler
+	handler *sfhttp.Handler
 	server  *httptest.Server
 }
 
@@ -44,7 +43,7 @@ func (s *HttpSuite) SetUpTest(c *gc.C) {
 	s.service = &mockService{}
 	s.keyPair, err = sf.NewKeyPair()
 	c.Assert(err, gc.IsNil)
-	s.handler = handler.NewHandler(s.keyPair, s.service)
+	s.handler = sfhttp.NewHandler(s.keyPair, s.service)
 
 	r := httprouter.New()
 	s.handler.Register(r)
@@ -56,10 +55,10 @@ func (s *HttpSuite) TearDownTest(c *gc.C) {
 	s.server.Close()
 }
 
-func (s *HttpSuite) newClient(c *gc.C) *client.Client {
+func (s *HttpSuite) newClient(c *gc.C) *sfhttp.Client {
 	kp, err := sf.NewKeyPair()
 	c.Assert(err, gc.IsNil)
-	return client.New(kp, s.server.URL, s.keyPair.PublicKey, nil)
+	return sfhttp.NewClient(kp, s.server.URL, s.keyPair.PublicKey, nil)
 }
 
 func mustNewNonce() *sf.Nonce {
@@ -74,11 +73,7 @@ func (s *HttpSuite) TestPushPop(c *gc.C) {
 	alice := s.newClient(c)
 	bob := s.newClient(c)
 
-	err := alice.Push(&client.PushMessage{
-		ID:        mustNewNonce().Encode(),
-		Contents:  []byte("hello world"),
-		Recipient: bob.PublicKey().Encode(),
-	})
+	err := alice.Push(bob.PublicKey().Encode(), []byte("hello world"))
 	c.Assert(err, gc.IsNil)
 
 	msgs, err := bob.Pop()

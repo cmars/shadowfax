@@ -1,4 +1,4 @@
-package handler
+package http
 
 import (
 	"bytes"
@@ -29,8 +29,8 @@ func NewHandler(keyPair sf.KeyPair, service entities.Service) *Handler {
 
 func (h *Handler) Register(r *httprouter.Router) {
 	r.GET("/publickey", h.publicKey)
-	r.DELETE("/messages/:recipient", h.pop)
-	r.POST("/messages/:sender", h.push)
+	r.DELETE("/inbox/:recipient", h.pop)
+	r.POST("/outbox/:sender", h.push)
 }
 
 func logError(err error) {
