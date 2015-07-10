@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	"golang.org/x/crypto/nacl/box"
@@ -38,7 +37,7 @@ func PublicKey(serverURL string, client *http.Client) (*sf.PublicKey, error) {
 	if client == nil {
 		client = http.DefaultClient
 	}
-	req, err := http.NewRequest("GET", path.Join(serverURL, "publickey"), nil)
+	req, err := http.NewRequest("GET", serverURL+"/publickey", nil)
 	if err != nil {
 		return nil, errgo.Mask(err)
 	}

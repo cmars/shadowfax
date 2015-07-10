@@ -1,6 +1,8 @@
 package http_test
 
 import (
+	"crypto/tls"
+	"net/http"
 	"net/http/httptest"
 	"testing"
 
@@ -15,10 +17,11 @@ import (
 func Test(t *testing.T) { gc.TestingT(t) }
 
 type HttpSuite struct {
-	service *mockService
-	keyPair sf.KeyPair
-	handler *sfhttp.Handler
-	server  *httptest.Server
+	service   *mockService
+	keyPair   sf.KeyPair
+	handler   *sfhttp.Handler
+	server    *httptest.Server
+	tlsServer *httptest.Server
 }
 
 var _ = gc.Suite(&HttpSuite{})
@@ -57,6 +60,7 @@ func (s *HttpSuite) SetUpTest(c *gc.C) {
 	s.handler.Register(r)
 
 	s.server = httptest.NewServer(r)
+	s.tlsServer = httptest.NewTLSServer(r)
 }
 
 func (s *HttpSuite) TearDownTest(c *gc.C) {
@@ -75,6 +79,21 @@ func mustNewNonce() *sf.Nonce {
 		panic(err)
 	}
 	return n
+}
+
+func (s *HttpSuite) TestPublicKey(c *gc.C) {
+	pk, err := sfhttp.PublicKey(s.server.URL+"/publickey", nil)
+	c.Assert(err, gc.ErrorMatches, ".*public key must be requested with https.*")
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+	pk, err = sfhttp.PublicKey(s.tlsServer.URL, httpClient)
+	c.Assert(err, gc.IsNil)
+	c.Assert(pk.Encode(), gc.Equals, s.keyPair.PublicKey.Encode())
 }
 
 func (s *HttpSuite) TestPushPop(c *gc.C) {
