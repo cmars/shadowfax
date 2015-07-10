@@ -4,7 +4,7 @@ Shadowfax is a simple, lightweight confidential messaging system. It should be
 considered an experimental tech preview. Shadowfax hasn't been battle-tested,
 security-reviewed or deployed into production.
 
-Shadowfax clients are identified by their 32-byte ed25519 public key. Clients
+Shadowfax clients are identified by their 32-byte curve25519 public key. Clients
 address messages to each other confidentially using authenticated public key
 encryption.
 

@@ -8,10 +8,10 @@ import (
 	"gopkg.in/errgo.v1"
 )
 
-// PublicKey is an ed25519 public key.
+// PublicKey is a curve25519 public key.
 type PublicKey [32]byte
 
-// PrivateKey is an ed25519 private key.
+// PrivateKey is a curve25519 private key.
 type PrivateKey [32]byte
 
 // KeyPair holds a public and private key for asymmetric box crypto.
