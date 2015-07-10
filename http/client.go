@@ -11,7 +11,6 @@ import (
 	"strings"
 
 	"golang.org/x/crypto/nacl/box"
-
 	"gopkg.in/errgo.v1"
 
 	sf "github.com/cmars/shadowfax"
@@ -31,7 +30,7 @@ type Client struct {
 func PublicKey(serverURL string, client *http.Client) (*sf.PublicKey, error) {
 	u, err := url.Parse(serverURL)
 	if err != nil {
-		return nil, errgo.Mask(err)
+		return nil, errgo.Mask(err, errgo.Any)
 	}
 	if u.Scheme != "https" {
 		return nil, errgo.Newf("public key must be requested with https")
@@ -77,7 +76,7 @@ func NewClient(keyPair sf.KeyPair, serverURL string, serverKey *sf.PublicKey, cl
 	}
 }
 
-// Request encrypts a request to the router and decrypts the response.
+// Request encrypts a request to the server and decrypts the response.
 //
 // If the client and server have securely exchanged keys out of band,
 // confidentiality does not depend on TLS.

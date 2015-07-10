@@ -15,7 +15,7 @@ import (
 func Test(t *testing.T) { gc.TestingT(t) }
 
 type HttpSuite struct {
-	service entities.Service
+	service *mockService
 	keyPair sf.KeyPair
 	handler *sfhttp.Handler
 	server  *httptest.Server
@@ -24,10 +24,15 @@ type HttpSuite struct {
 var _ = gc.Suite(&HttpSuite{})
 
 type mockService struct {
-	msgs []*entities.AddressedMessage
+	msgs   []*entities.AddressedMessage
+	onPush func(msg *entities.AddressedMessage)
+	onPop  func(msgs []*entities.AddressedMessage)
 }
 
 func (s *mockService) Push(msg *entities.AddressedMessage) error {
+	if s.onPush != nil {
+		s.onPush(msg)
+	}
 	s.msgs = append(s.msgs, msg)
 	return nil
 }
@@ -35,6 +40,9 @@ func (s *mockService) Push(msg *entities.AddressedMessage) error {
 func (s *mockService) Pop(_ string) ([]*entities.AddressedMessage, error) {
 	result := s.msgs
 	s.msgs = nil
+	if s.onPop != nil {
+		s.onPop(result)
+	}
 	return result, nil
 }
 
@@ -73,10 +81,25 @@ func (s *HttpSuite) TestPushPop(c *gc.C) {
 	alice := s.newClient(c)
 	bob := s.newClient(c)
 
+	var msgNonce string
+	s.service.onPush = func(msg *entities.AddressedMessage) {
+		c.Assert(msg.Sender, gc.Equals, alice.PublicKey().Encode())
+		c.Assert(msg.Recipient, gc.Equals, bob.PublicKey().Encode())
+		c.Assert(len(msg.Contents) > 0, gc.Equals, true)
+		c.Assert(msg.Contents, gc.Not(gc.DeepEquals), []byte("hello world"))
+		msgNonce = msg.ID
+	}
+	s.service.onPop = func(msgs []*entities.AddressedMessage) {
+		c.Assert(msgs, gc.HasLen, 1)
+		c.Assert(msgs[0].ID, gc.Equals, msgNonce)
+		s.service.onPush(msgs[0])
+	}
+
 	err := alice.Push(bob.PublicKey().Encode(), []byte("hello world"))
 	c.Assert(err, gc.IsNil)
 
 	msgs, err := bob.Pop()
 	c.Assert(err, gc.IsNil)
 	c.Assert(msgs, gc.HasLen, 1)
+	c.Assert(msgs[0].Contents, gc.DeepEquals, []byte("hello world"))
 }
