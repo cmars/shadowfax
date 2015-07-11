@@ -1,4 +1,6 @@
 # shadowfax
+[![Build Status](https://travis-ci.org/cmars/shadowfax.svg)](https://travis-ci.org/cmars/shadowfax)
+[![GoDoc](https://godoc.org/github.com/cmars/shadowfax?status.svg)](https://godoc.org/github.com/cmars/shadowfax)
 
 Shadowfax is a simple, lightweight confidential messaging system. It should be
 considered an experimental tech preview. Shadowfax hasn't been battle-tested,
