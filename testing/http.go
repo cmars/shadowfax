@@ -96,4 +96,8 @@ func (s *HTTPHandlerSuite) TestPushPop(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(msgs, gc.HasLen, 1)
 	c.Assert(msgs[0].Contents, gc.DeepEquals, []byte("hello world"))
+
+	msgs, err = bob.Pop()
+	c.Assert(err, gc.IsNil)
+	c.Assert(msgs, gc.HasLen, 0)
 }
