@@ -11,18 +11,18 @@ import (
 	"gopkg.in/errgo.v1"
 
 	sf "github.com/cmars/shadowfax"
-	"github.com/cmars/shadowfax/entities"
+	"github.com/cmars/shadowfax/storage"
 	"github.com/cmars/shadowfax/wire"
 )
 
 // Handler handles HTTP requests as a shadowfax server.
 type Handler struct {
 	keyPair sf.KeyPair
-	service entities.Service
+	service storage.Service
 }
 
 // NewHandler returns a new Handler with public key pair and service backend.
-func NewHandler(keyPair sf.KeyPair, service entities.Service) *Handler {
+func NewHandler(keyPair sf.KeyPair, service storage.Service) *Handler {
 	return &Handler{
 		keyPair: keyPair,
 		service: service,
@@ -164,13 +164,13 @@ func (h *Handler) push(w http.ResponseWriter, r *http.Request, p httprouter.Para
 		return
 	}
 
-	var entityMessages []*entities.AddressedMessage
+	var entityMessages []*storage.AddressedMessage
 	for _, wireMessage := range wireMessages {
 		if wireMessage.Recipient != "" {
-			entityMessages = append(entityMessages, &entities.AddressedMessage{
+			entityMessages = append(entityMessages, &storage.AddressedMessage{
 				Recipient: wireMessage.Recipient,
 				Sender:    auth.ClientKey.Encode(),
-				Message: entities.Message{
+				Message: storage.Message{
 					ID:       wireMessage.ID,
 					Contents: wireMessage.Contents,
 				},

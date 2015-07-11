@@ -1,4 +1,4 @@
-package entities
+package storage
 
 type Service interface {
 	Push(msg *AddressedMessage) error

@@ -19,7 +19,7 @@ func DecodeNonce(s string) (*Nonce, error) {
 		return nil, err
 	}
 	if len(buf) != 24 {
-		return nil, errgo.Newf("invalid nonce length %q", len(buf))
+		return nil, errgo.Newf("invalid nonce length %q", buf)
 	}
 	copy(nonce[:], buf)
 	return &nonce, nil
