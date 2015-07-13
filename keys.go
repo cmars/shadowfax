@@ -14,6 +14,9 @@ type PublicKey [32]byte
 // PrivateKey is a curve25519 private key.
 type PrivateKey [32]byte
 
+// SecretKey is a secret key used for symmetric encryption.
+type SecretKey [32]byte
+
 // KeyPair holds a public and private key for asymmetric box crypto.
 type KeyPair struct {
 	PublicKey  *PublicKey
