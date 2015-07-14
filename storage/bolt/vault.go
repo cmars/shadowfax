@@ -23,9 +23,9 @@ func NewVault(db *bolt.DB, secretKey *sf.SecretKey) *vault {
 func (v *vault) Current() (*sf.KeyPair, error) {
 	var keyPair sf.KeyPair
 	err := v.db.View(func(tx *bolt.Tx) error {
-		logBucket, err := tx.CreateBucketIfNotExists([]byte("log"))
-		if err != nil {
-			return errgo.Mask(err)
+		logBucket := tx.Bucket([]byte("log"))
+		if logBucket == nil {
+			return errgo.New("empty vault")
 		}
 
 		seqBytes, encBytes := logBucket.Cursor().Last()
@@ -58,18 +58,18 @@ func (v *vault) Current() (*sf.KeyPair, error) {
 func (v *vault) Get(key *sf.PublicKey) (*sf.KeyPair, error) {
 	var keyPair sf.KeyPair
 	err := v.db.View(func(tx *bolt.Tx) error {
-		keysBucket, err := tx.CreateBucketIfNotExists([]byte("keys"))
-		if err != nil {
-			return errgo.Mask(err)
+		keysBucket := tx.Bucket([]byte("keys"))
+		if keysBucket == nil {
+			return errgo.New("empty vault")
 		}
-		logBucket, err := tx.CreateBucketIfNotExists([]byte("log"))
-		if err != nil {
-			return errgo.Mask(err)
+		logBucket := tx.Bucket([]byte("log"))
+		if logBucket == nil {
+			return errgo.New("empty vault")
 		}
 
 		seqBytes := keysBucket.Get(key[:])
-		if err != nil {
-			return errgo.Mask(err)
+		if seqBytes == nil {
+			return errgo.Newf("key pair not found for %q", key.Encode())
 		}
 		seqInt := new(big.Int)
 		seqInt.SetBytes(seqBytes)
@@ -128,7 +128,7 @@ func (v *vault) Put(keyPair *sf.KeyPair) error {
 		}
 		encBytes := secretbox.Seal(nil, kpBuf.Bytes(), (*[24]byte)(seq), (*[32]byte)(v.secretKey))
 		// TODO: zeroize kpBuf
-		err = keysBucket.Put(keyPair.PublicKey[:], encBytes)
+		err = keysBucket.Put(keyPair.PublicKey[:], seq[:])
 		if err != nil {
 			return errgo.Mask(err)
 		}
