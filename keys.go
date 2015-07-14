@@ -2,6 +2,7 @@ package shadowfax
 
 import (
 	"crypto/rand"
+	"io"
 
 	"golang.org/x/crypto/nacl/box"
 	"gopkg.in/basen.v1"
@@ -13,6 +14,9 @@ type PublicKey [32]byte
 
 // PrivateKey is a curve25519 private key.
 type PrivateKey [32]byte
+
+// SecretKey is a secret key used for symmetric encryption.
+type SecretKey [32]byte
 
 // KeyPair holds a public and private key for asymmetric box crypto.
 type KeyPair struct {
@@ -47,4 +51,14 @@ func DecodePublicKey(s string) (*PublicKey, error) {
 // Encode encodes the public key to a Base58 string representation.
 func (pk PublicKey) Encode() string {
 	return basen.Base58.EncodeToString(pk[:])
+}
+
+// NewSecretKey returns a new randomly-generated secret key.
+func NewSecretKey() (*SecretKey, error) {
+	var key SecretKey
+	_, err := io.ReadFull(rand.Reader, key[:])
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return &key, nil
 }
