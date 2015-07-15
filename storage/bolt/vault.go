@@ -16,10 +16,12 @@ type vault struct {
 	secretKey *sf.SecretKey
 }
 
+// NewVault returns a new storage.Vault backed by bolt DB.
 func NewVault(db *bolt.DB, secretKey *sf.SecretKey) *vault {
 	return &vault{db, secretKey}
 }
 
+// Current implements storage.Vault.
 func (v *vault) Current() (*sf.KeyPair, error) {
 	var keyPair sf.KeyPair
 	err := v.db.View(func(tx *bolt.Tx) error {
@@ -55,6 +57,7 @@ func (v *vault) Current() (*sf.KeyPair, error) {
 	return &keyPair, nil
 }
 
+// Get implements storage.Vault.
 func (v *vault) Get(key *sf.PublicKey) (*sf.KeyPair, error) {
 	var keyPair sf.KeyPair
 	err := v.db.View(func(tx *bolt.Tx) error {
@@ -99,6 +102,7 @@ func (v *vault) Get(key *sf.PublicKey) (*sf.KeyPair, error) {
 	return &keyPair, nil
 }
 
+// Put implements storage.Vault.
 func (v *vault) Put(keyPair *sf.KeyPair) error {
 	return v.db.Update(func(tx *bolt.Tx) error {
 		keysBucket, err := tx.CreateBucketIfNotExists([]byte("keys"))

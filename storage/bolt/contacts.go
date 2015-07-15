@@ -17,10 +17,12 @@ type contacts struct {
 	db *bolt.DB
 }
 
+// NewContacts returns a new storage.Contacts backed by bolt DB.
 func NewContacts(db *bolt.DB) *contacts {
 	return &contacts{db}
 }
 
+// Key implements storage.Contacts.
 func (c *contacts) Key(name string) (*sf.PublicKey, error) {
 	var pk sf.PublicKey
 	err := c.db.View(func(tx *bolt.Tx) error {
@@ -45,13 +47,14 @@ func (c *contacts) Key(name string) (*sf.PublicKey, error) {
 	return &pk, nil
 }
 
+// Name implements storage.Contacts.
 func (c *contacts) Name(key *sf.PublicKey) (string, error) {
 	var name []byte
 	var fail string
 	err := c.db.View(func(tx *bolt.Tx) error {
-		contactsBucket, err := tx.CreateBucketIfNotExists([]byte("contacts"))
-		if err != nil {
-			return errgo.Mask(err)
+		contactsBucket := tx.Bucket([]byte("contacts"))
+		if contactsBucket == nil {
+			return errgo.New("key not found")
 		}
 		name = contactsBucket.Get(key[:])
 		return nil
@@ -65,6 +68,7 @@ func (c *contacts) Name(key *sf.PublicKey) (string, error) {
 	return string(name), nil
 }
 
+// Put implements storage.Contacts.
 func (c *contacts) Put(name string, key *sf.PublicKey) error {
 	if len(name) == 0 {
 		return errgo.New("empty key name")

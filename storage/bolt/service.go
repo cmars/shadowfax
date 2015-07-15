@@ -13,10 +13,12 @@ type service struct {
 	db *bolt.DB
 }
 
+// NewService returns a new storage.Service backed by bolt DB.
 func NewService(db *bolt.DB) *service {
 	return &service{db}
 }
 
+// Push implements storage.Service.
 func (s *service) Push(msg *storage.AddressedMessage) error {
 	rcptKey, err := sf.DecodePublicKey(msg.Recipient)
 	if err != nil {
@@ -48,6 +50,7 @@ func (s *service) Push(msg *storage.AddressedMessage) error {
 	})
 }
 
+// Pop implements storage.Service.
 func (s *service) Pop(recipient string) (_ []*storage.AddressedMessage, popErr error) {
 	rcptKey, err := sf.DecodePublicKey(recipient)
 	if err != nil {

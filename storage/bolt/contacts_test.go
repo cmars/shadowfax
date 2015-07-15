@@ -52,3 +52,39 @@ func (s *contactsSuite) TestContacts(c *gc.C) {
 	c.Assert(err, gc.IsNil)
 	c.Assert(key, gc.DeepEquals, bob2.PublicKey)
 }
+
+func (s *contactsSuite) TestSameName(c *gc.C) {
+	alice := sftesting.MustNewKeyPair()
+	bob := sftesting.MustNewKeyPair()
+
+	testContacts := sfbolt.NewContacts(s.db)
+	testContacts.Put("test", alice.PublicKey)
+	testContacts.Put("test", bob.PublicKey)
+	name, err := testContacts.Name(alice.PublicKey)
+	c.Assert(err, gc.IsNil)
+	c.Assert(name, gc.Equals, "test")
+	name, err = testContacts.Name(bob.PublicKey)
+	c.Assert(err, gc.IsNil)
+	c.Assert(name, gc.Equals, "test")
+	key, err := testContacts.Key("test")
+	c.Assert(err, gc.IsNil)
+	c.Assert(key, gc.DeepEquals, bob.PublicKey)
+}
+
+func (s *contactsSuite) TestSameKey(c *gc.C) {
+	alice := sftesting.MustNewKeyPair()
+
+	testContacts := sfbolt.NewContacts(s.db)
+	for _, name := range []string{"go", "ask", "alice", "when", "shes", "ten", "feet", "tall"} {
+		testContacts.Put(name, alice.PublicKey)
+	}
+	name, err := testContacts.Name(alice.PublicKey)
+	c.Assert(err, gc.IsNil)
+	c.Assert(name, gc.Equals, "tall", gc.Commentf("expect last name set"))
+	key, err := testContacts.Key("alice")
+	c.Assert(err, gc.IsNil)
+	c.Assert(key, gc.DeepEquals, alice.PublicKey)
+	key, err = testContacts.Key("when")
+	c.Assert(err, gc.IsNil)
+	c.Assert(key, gc.DeepEquals, alice.PublicKey)
+}
