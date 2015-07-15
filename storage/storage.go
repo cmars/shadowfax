@@ -10,10 +10,7 @@ type Contacts interface {
 	// Key returns the latest public key for the given name.
 	Key(name string) (*sf.PublicKey, error)
 
-	// Name returns the name given to the public key.
-	//
-	// If there are multiple names assigned to the given key, the first
-	// matching name is returned.
+	// Name returns the latest name given to the public key.
 	Name(key *sf.PublicKey) (string, error)
 
 	// Put assigns a public key to a given name, superseding any prior name
