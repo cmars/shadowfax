@@ -2,11 +2,13 @@ package bolt_test
 
 import (
 	"path/filepath"
+	"sort"
 
 	"github.com/boltdb/bolt"
 	gc "gopkg.in/check.v1"
 
 	sf "github.com/cmars/shadowfax"
+	"github.com/cmars/shadowfax/storage"
 	sfbolt "github.com/cmars/shadowfax/storage/bolt"
 	sftesting "github.com/cmars/shadowfax/testing"
 )
@@ -51,6 +53,17 @@ func (s *contactsSuite) TestContacts(c *gc.C) {
 	key, err = aliceContacts.Key("bob")
 	c.Assert(err, gc.IsNil)
 	c.Assert(key, gc.DeepEquals, bob2.PublicKey)
+
+	cinfos, err := aliceContacts.Current()
+	c.Assert(err, gc.IsNil)
+	sort.Sort(cinfos)
+	c.Assert(cinfos, gc.DeepEquals, storage.ContactInfos{{
+		Name:    "bob",
+		Address: bob2.PublicKey,
+	}, {
+		Name:    "carol",
+		Address: carol.PublicKey,
+	}})
 }
 
 func (s *contactsSuite) TestSameName(c *gc.C) {

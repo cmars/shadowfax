@@ -7,6 +7,7 @@ import (
 	"gopkg.in/errgo.v1"
 
 	sf "github.com/cmars/shadowfax"
+	"github.com/cmars/shadowfax/storage"
 )
 
 var (
@@ -97,4 +98,39 @@ func (c *contacts) Put(name string, key *sf.PublicKey) error {
 		}
 		return nil
 	})
+}
+
+func (c *contacts) Current() (storage.ContactInfos, error) {
+	var result storage.ContactInfos
+	err := c.db.View(func(tx *bolt.Tx) error {
+		contactsBucket := tx.Bucket([]byte("contacts"))
+		if contactsBucket == nil {
+			// empty contacts
+			return nil
+		}
+		cur := contactsBucket.Cursor()
+		for name, _ := cur.First(); name != nil; name, _ = cur.Next() {
+			keysBucket := contactsBucket.Bucket([]byte(name))
+			if keysBucket == nil {
+				// TODO: warning, name has no keys!
+				continue
+			}
+			seqBytes, pkBytes := keysBucket.Cursor().Last()
+			if seqBytes == nil {
+				// TODO: warning, empty bucket!
+				continue
+			}
+			pk := new(sf.PublicKey)
+			copy(pk[:], pkBytes)
+			result = append(result, storage.ContactInfo{
+				Name:    string(name),
+				Address: pk,
+			})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return result, nil
 }

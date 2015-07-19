@@ -16,7 +16,28 @@ type Contacts interface {
 	// Put assigns a public key to a given name, superseding any prior name
 	// assignment.
 	Put(name string, key *sf.PublicKey) error
+
+	// Current returns the current name assignments.
+	Current() (ContactInfos, error)
 }
+
+// ContactInfo represents the local name for an address.
+type ContactInfo struct {
+	Name    string
+	Address *sf.PublicKey
+}
+
+// ContactInfos is a sortable slice of contact information.
+type ContactInfos []ContactInfo
+
+// Len implements sort.Interface.
+func (c ContactInfos) Len() int { return len(c) }
+
+// Swap implements sort.Interface.
+func (c ContactInfos) Swap(i, j int) { c[i], c[j] = c[j], c[i] }
+
+// Less implements sort.Interface.
+func (c ContactInfos) Less(i, j int) bool { return c[i].Name < c[j].Name }
 
 // Vault stores public-private key pairs.
 type Vault interface {
