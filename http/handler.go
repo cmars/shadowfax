@@ -17,12 +17,12 @@ import (
 
 // Handler handles HTTP requests as a shadowfax server.
 type Handler struct {
-	keyPair sf.KeyPair
+	keyPair *sf.KeyPair
 	service storage.Service
 }
 
 // NewHandler returns a new Handler with public key pair and service backend.
-func NewHandler(keyPair sf.KeyPair, service storage.Service) *Handler {
+func NewHandler(keyPair *sf.KeyPair, service storage.Service) *Handler {
 	return &Handler{
 		keyPair: keyPair,
 		service: service,

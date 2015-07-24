@@ -29,6 +29,7 @@ import (
 var (
 	urlFlagVar     **url.URL
 	homedirFlagVar *string
+	serverKeyFlag  = kingpin.Flag("server-key", "public key of shadowfax server").String()
 
 	nameCmd = kingpin.Command("name", "contact names")
 
@@ -351,10 +352,20 @@ func msgPush() error {
 }
 
 func newClient(keyPair *sf.KeyPair) (*sfhttp.Client, error) {
-	serverKey, err := sfhttp.PublicKey((*urlFlagVar).String(), nil)
-	if err != nil {
-		return nil, errgo.Mask(err)
+	var err error
+	var serverKey *sf.PublicKey
+	if *serverKeyFlag == "" {
+		serverKey, err = sfhttp.PublicKey((*urlFlagVar).String(), nil)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	} else {
+		serverKey, err = sf.DecodePublicKey(*serverKeyFlag)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
 	}
+
 	return sfhttp.NewClient(*keyPair, (*urlFlagVar).String(), serverKey, &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
@@ -364,11 +375,36 @@ func newClient(keyPair *sf.KeyPair) (*sfhttp.Client, error) {
 	}), nil
 }
 
+func msgPop() error {
+	vault, err := newVault()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	keyPair, err := vault.Current()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	client, err := newClient(keyPair)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	msgs, err := client.Pop()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	for i, msg := range msgs {
+		_, err = fmt.Println(i, msg.ID, msg.Sender, msg.Contents)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	return nil
+}
+
 func notImplemented() error {
 	return errgo.New("not implemented yet")
 }
 
 var (
 	addrList = notImplemented
-	msgPop   = notImplemented
 )
