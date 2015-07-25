@@ -46,10 +46,10 @@ var (
 
 	msgCmd = kingpin.Command("msg", "messages")
 
-	msgPushCmd       = msgCmd.Command("push", "push message")
-	msgPushRcptArg   = msgPushCmd.Arg("recipient", "message recipient").String()
-	msgPushSendFlag  = msgPushCmd.Flag("sender", "sender address").Short('s').String()
-	msgPushInputFlag = msgPushCmd.Flag("file", "send file contents").Short('f').ExistingFile()
+	msgPushCmd         = msgCmd.Command("push", "push message")
+	msgPushRcptArg     = msgPushCmd.Arg("recipient", "message recipient").Required().String()
+	msgPushContentsArg = msgPushCmd.Arg("contents", "send file contents").Required().ExistingFile()
+	msgPushSendArg     = msgPushCmd.Arg("sender", "sender address").String()
 
 	msgPopCmd = msgCmd.Command("pop", "pop message")
 )
@@ -303,17 +303,17 @@ func msgPush() error {
 	}
 
 	var keyPair *sf.KeyPair
-	if *msgPushSendFlag == "" {
+	if *msgPushSendArg == "" {
 		keyPair, err = vault.Current()
 		if err != nil {
 			return errgo.Mask(err)
 		}
 	} else {
-		pk, err := sf.DecodePublicKey(*msgPushSendFlag)
+		sendKey, err := contacts.Key(*msgPushSendArg)
 		if err != nil {
 			return errgo.Mask(err)
 		}
-		keyPair, err = vault.Get(pk)
+		keyPair, err = vault.Get(sendKey)
 		if err != nil {
 			return errgo.Mask(err)
 		}
@@ -325,21 +325,14 @@ func msgPush() error {
 	}
 
 	var contents bytes.Buffer
-	if *msgPushInputFlag == "" {
-		_, err = io.Copy(&contents, os.Stdin)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-	} else {
-		f, err := os.Open(*msgPushInputFlag)
-		if err != nil {
-			return errgo.Mask(err)
-		}
-		_, err = io.Copy(&contents, f)
-		f.Close()
-		if err != nil {
-			return errgo.Mask(err)
-		}
+	f, err := os.Open(*msgPushContentsArg)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	_, err = io.Copy(&contents, f)
+	f.Close()
+	if err != nil {
+		return errgo.Mask(err)
 	}
 
 	client, err := newClient(keyPair)
@@ -393,7 +386,7 @@ func msgPop() error {
 		return errgo.Mask(err)
 	}
 	for i, msg := range msgs {
-		_, err = fmt.Println(i, msg.ID, msg.Sender, msg.Contents)
+		_, err = fmt.Println(i, msg.ID, msg.Sender, string(msg.Contents))
 		if err != nil {
 			return errgo.Mask(err)
 		}

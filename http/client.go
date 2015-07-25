@@ -226,7 +226,10 @@ func (c *Client) Pop() ([]*PopMessage, error) {
 			Sender:   msg.Sender,
 		})
 	}
-	return popMessages, errors
+	if len(errors) > 0 {
+		return popMessages, errors
+	}
+	return popMessages, nil
 }
 
 // PublicKey returns the public key identity of the client.
