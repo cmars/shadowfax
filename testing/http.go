@@ -15,7 +15,7 @@ import (
 
 type HTTPHandlerSuite struct {
 	service   storage.Service
-	keyPair   sf.KeyPair
+	keyPair   *sf.KeyPair
 	handler   *sfhttp.Handler
 	server    *httptest.Server
 	tlsServer *httptest.Server
@@ -62,12 +62,12 @@ func MustNewNonce() *sf.Nonce {
 	return n
 }
 
-func MustNewKeyPair() sf.KeyPair {
+func MustNewKeyPair() *sf.KeyPair {
 	kp, err := sf.NewKeyPair()
 	if err != nil {
 		panic(err)
 	}
-	return kp
+	return &kp
 }
 
 func (s *HTTPHandlerSuite) TestPublicKey(c *gc.C) {

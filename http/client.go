@@ -18,7 +18,7 @@ import (
 
 // Client pushes and pops messages in the shadowfax messaging system.
 type Client struct {
-	keyPair   sf.KeyPair
+	keyPair   *sf.KeyPair
 	serverURL string
 	serverKey *sf.PublicKey
 	client    *http.Client
@@ -63,7 +63,7 @@ func PublicKey(serverURL string, client *http.Client) (*sf.PublicKey, error) {
 }
 
 // NewClient returns a new shadowfax client.
-func NewClient(keyPair sf.KeyPair, serverURL string, serverKey *sf.PublicKey, client *http.Client) *Client {
+func NewClient(keyPair *sf.KeyPair, serverURL string, serverKey *sf.PublicKey, client *http.Client) *Client {
 	if client == nil {
 		client = http.DefaultClient
 	}

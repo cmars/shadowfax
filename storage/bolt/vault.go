@@ -57,6 +57,49 @@ func (v *vault) Current() (*sf.KeyPair, error) {
 	return &keyPair, nil
 }
 
+// Each implements storage.Each.
+func (v *vault) Each(kpf func(keyPair *sf.KeyPair) error) error {
+	err := v.db.View(func(tx *bolt.Tx) error {
+		logBucket := tx.Bucket([]byte("log"))
+		if logBucket == nil {
+			return errgo.New("empty vault")
+		}
+
+		c := logBucket.Cursor()
+		for seqBytes, encBytes := c.First(); seqBytes != nil; seqBytes, encBytes = c.Next() {
+			if v == nil {
+				// TODO: warning, empty value for key not expected
+				continue
+			}
+			// TODO: mprotect private key?
+			var keyPair sf.KeyPair
+
+			seq := new(sf.Nonce)
+			copy(seq[:], seqBytes)
+			keyPairBytes, ok := secretbox.Open(nil, encBytes, (*[24]byte)(seq), (*[32]byte)(v.secretKey))
+			if !ok {
+				seq := new(big.Int)
+				seq.SetBytes(seqBytes)
+				return errgo.Newf("error opening key pair #%s", seq.String())
+			}
+			keyPair.PublicKey = new(sf.PublicKey)
+			copy(keyPair.PublicKey[:], keyPairBytes[:32])
+			keyPair.PrivateKey = new(sf.PrivateKey)
+			copy(keyPair.PrivateKey[:], keyPairBytes[32:])
+
+			err := kpf(&keyPair)
+			if err != nil {
+				return errgo.Mask(err)
+			}
+
+			// TODO: zeroize keyPairBytes
+		}
+
+		return nil
+	})
+	return errgo.Mask(err)
+}
+
 // Get implements storage.Vault.
 func (v *vault) Get(key *sf.PublicKey) (*sf.KeyPair, error) {
 	var keyPair sf.KeyPair

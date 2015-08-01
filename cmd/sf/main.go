@@ -30,6 +30,7 @@ var (
 	urlFlagVar     **url.URL
 	homedirFlagVar *string
 	serverKeyFlag  = kingpin.Flag("server-key", "public key of shadowfax server").String()
+	passphraseFlag = kingpin.Flag("passphrase", "file containing passphrase").ExistingFile()
 
 	nameCmd = kingpin.Command("name", "contact names")
 
@@ -186,6 +187,18 @@ func addrDefault() error {
 	return errgo.Mask(err)
 }
 
+func addrList() error {
+	vault, err := newVault()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	err = vault.Each(func(pk *sf.KeyPair) error {
+		_, err := fmt.Println(pk.PublicKey.Encode())
+		return errgo.Mask(err)
+	})
+	return errgo.Mask(err)
+}
+
 func newVault() (storage.Vault, error) {
 	sk, err := getVaultKey()
 	if err != nil {
@@ -201,15 +214,26 @@ func newVault() (storage.Vault, error) {
 }
 
 func getVaultKey() (*sf.SecretKey, error) {
-	fmt.Print("Passphrase: ")
-	pass := gopass.GetPasswd()
+	var pass []byte
+	var err error
+	if *passphraseFlag != "" {
+		pass, err = ioutil.ReadFile(*passphraseFlag)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	} else {
+		fmt.Print("Passphrase: ")
+		pass = gopass.GetPasswd()
+	}
 	salt, hash, err := getSaltHash(pass)
 	if os.IsNotExist(errgo.Cause(err)) {
-		// If the salt file isn't there, we need to confirm a new passphrase
-		fmt.Print("Confirm: ")
-		confirm := gopass.GetPasswd()
-		if !bytes.Equal(confirm, pass) {
-			return nil, errgo.New("passphrases did not match")
+		if *passphraseFlag == "" {
+			// If the salt file isn't there, we need to confirm a new passphrase
+			fmt.Print("Confirm: ")
+			confirm := gopass.GetPasswd()
+			if !bytes.Equal(confirm, pass) {
+				return nil, errgo.New("passphrases did not match")
+			}
 		}
 		salt, err = createSaltHash(pass)
 		if err != nil {
@@ -359,7 +383,7 @@ func newClient(keyPair *sf.KeyPair) (*sfhttp.Client, error) {
 		}
 	}
 
-	return sfhttp.NewClient(*keyPair, (*urlFlagVar).String(), serverKey, &http.Client{
+	return sfhttp.NewClient(keyPair, (*urlFlagVar).String(), serverKey, &http.Client{
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{
 				InsecureSkipVerify: true,
@@ -397,7 +421,3 @@ func msgPop() error {
 func notImplemented() error {
 	return errgo.New("not implemented yet")
 }
-
-var (
-	addrList = notImplemented
-)

@@ -50,6 +50,11 @@ type Vault interface {
 
 	// Put adds a new key pair, which becomes the latest, current key pair.
 	Put(keyPair *sf.KeyPair) error
+
+	// Each calls the given function with each key pair in the vault.
+	//
+	// Iteration stops if the function returns an error.
+	Each(func(key *sf.KeyPair) error) error
 }
 
 // Service stores messages for a shadowfax server.
