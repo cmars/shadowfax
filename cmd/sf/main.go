@@ -4,8 +4,12 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha512"
+	"crypto/tls"
 	"fmt"
+	"io"
 	"io/ioutil"
+	"net/http"
+	"net/url"
 	"os"
 	"os/user"
 	"path/filepath"
@@ -17,13 +21,16 @@ import (
 	"gopkg.in/errgo.v1"
 
 	sf "github.com/cmars/shadowfax"
+	sfhttp "github.com/cmars/shadowfax/http"
 	"github.com/cmars/shadowfax/storage"
 	sfbolt "github.com/cmars/shadowfax/storage/bolt"
 )
 
 var (
-	urlFlag        = kingpin.Flag("url", "server URL").Default("http://localhost:8080").URL()
+	urlFlagVar     **url.URL
 	homedirFlagVar *string
+	serverKeyFlag  = kingpin.Flag("server-key", "public key of shadowfax server").String()
+	passphraseFlag = kingpin.Flag("passphrase", "file containing passphrase").ExistingFile()
 
 	nameCmd = kingpin.Command("name", "contact names")
 
@@ -38,9 +45,14 @@ var (
 	addrListCmd    = addrCmd.Command("list", "list addresses")
 	addrDefaultCmd = addrCmd.Command("default", "show default address")
 
-	msgCmd     = kingpin.Command("msg", "messages")
-	msgPushCmd = msgCmd.Command("push", "push message")
-	msgPopCmd  = msgCmd.Command("pop", "pop message")
+	msgCmd = kingpin.Command("msg", "messages")
+
+	msgPushCmd         = msgCmd.Command("push", "push message")
+	msgPushRcptArg     = msgPushCmd.Arg("recipient", "message recipient").Required().String()
+	msgPushContentsArg = msgPushCmd.Arg("contents", "send file contents").Required().ExistingFile()
+	msgPushSendArg     = msgPushCmd.Arg("sender", "sender address").String()
+
+	msgPopCmd = msgCmd.Command("pop", "pop message")
 )
 
 func init() {
@@ -53,6 +65,13 @@ func init() {
 		defaultHomeDir = filepath.Join(user.HomeDir, ".shadowfax")
 	}
 	homedirFlagVar = homedirFlag.Default(defaultHomeDir).String()
+
+	urlFlag := kingpin.Flag("url", "server URL").Short('u')
+	defaultURL := os.Getenv("SHADOWFAX_SERVER")
+	if defaultURL == "" {
+		defaultURL = "https://localhost:8443"
+	}
+	urlFlagVar = urlFlag.Default(defaultURL).URL()
 }
 
 func main() {
@@ -106,6 +125,24 @@ func nameAdd() error {
 	return errgo.Mask(err)
 }
 
+func nameList() error {
+	contacts, err := newContacts()
+	if err != nil {
+		return err
+	}
+	cinfos, err := contacts.Current()
+	if err != nil {
+		return err
+	}
+	for _, cinfo := range cinfos {
+		_, err = fmt.Printf("%-20s %-50s\n", cinfo.Name, cinfo.Address.Encode())
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	return nil
+}
+
 func newContacts() (storage.Contacts, error) {
 	contactsPath := filepath.Join(*homedirFlagVar, "contacts")
 	db, err := bolt.Open(contactsPath, 0600, nil)
@@ -125,6 +162,15 @@ func addrCreate() error {
 		return errgo.Mask(err)
 	}
 	err = vault.Put(&keyPair)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	contacts, err := newContacts()
+	if err != nil {
+		return err
+	}
+	err = contacts.Put("me", keyPair.PublicKey)
 	return errgo.Mask(err)
 }
 
@@ -138,6 +184,18 @@ func addrDefault() error {
 		return errgo.Mask(err)
 	}
 	_, err = fmt.Println(keyPair.PublicKey.Encode())
+	return errgo.Mask(err)
+}
+
+func addrList() error {
+	vault, err := newVault()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	err = vault.Each(func(pk *sf.KeyPair) error {
+		_, err := fmt.Println(pk.PublicKey.Encode())
+		return errgo.Mask(err)
+	})
 	return errgo.Mask(err)
 }
 
@@ -156,18 +214,37 @@ func newVault() (storage.Vault, error) {
 }
 
 func getVaultKey() (*sf.SecretKey, error) {
-	fmt.Print("Passphrase: ")
-	pass := gopass.GetPasswd()
-	salt, isNew, err := getSalt(pass)
-	if err != nil {
-		return nil, errgo.Mask(err)
+	var pass []byte
+	var err error
+	if *passphraseFlag != "" {
+		pass, err = ioutil.ReadFile(*passphraseFlag)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	} else {
+		fmt.Print("Passphrase: ")
+		pass = gopass.GetPasswd()
 	}
-
-	if isNew {
-		fmt.Print("Confirm: ")
-		confirm := gopass.GetPasswd()
-		if !bytes.Equal(confirm, pass) {
-			return nil, errgo.New("passphrases did not match")
+	salt, hash, err := getSaltHash(pass)
+	if os.IsNotExist(errgo.Cause(err)) {
+		if *passphraseFlag == "" {
+			// If the salt file isn't there, we need to confirm a new passphrase
+			fmt.Print("Confirm: ")
+			confirm := gopass.GetPasswd()
+			if !bytes.Equal(confirm, pass) {
+				return nil, errgo.New("passphrases did not match")
+			}
+		}
+		salt, err = createSaltHash(pass)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	} else if err != nil {
+		return nil, errgo.Mask(err)
+	} else {
+		checkHash := calcHash(pass, salt)
+		if !bytes.Equal(hash, checkHash) {
+			return nil, errgo.New("invalid passphrase")
 		}
 	}
 
@@ -180,51 +257,167 @@ func getVaultKey() (*sf.SecretKey, error) {
 	return &sk, nil
 }
 
-func getSalt(pass []byte) ([]byte, bool, error) {
-	saltPath := filepath.Join(*homedirFlagVar, "vault.salt")
-	salt, err := ioutil.ReadFile(saltPath)
-	if os.IsNotExist(err) {
-		// generate a new salt
-		salt = make([]byte, 256)
-		_, err = rand.Reader.Read(salt)
-		if err != nil {
-			return nil, false, errgo.Mask(err)
-		}
-		err = ioutil.WriteFile(saltPath, salt, 0600)
-		if err != nil {
-			return nil, false, errgo.Mask(err)
-		}
-	}
+const (
+	vaultSaltName = "vault.salt"
+	vaultSaltSize = 32
+)
 
+var hashVersion = []byte("v1")
+
+func calcHash(pass, salt []byte) []byte {
 	h := sha512.New384()
-	h.Write([]byte("v1,"))
+	h.Write(hashVersion)
 	h.Write(salt)
 	h.Write(pass)
-	sum := h.Sum(nil)
+	return h.Sum(nil)
+}
 
-	var isNew bool
-	hashPath := filepath.Join(*homedirFlagVar, "vault.hash")
-	hashPrev, err := ioutil.ReadFile(hashPath)
-	if os.IsNotExist(err) {
-		err = ioutil.WriteFile(hashPath, sum, 0600)
-		if err != nil {
-			return nil, false, errgo.Mask(err)
-		}
-		isNew = true
-	} else if !bytes.Equal(hashPrev, sum) {
-		return nil, false, errgo.New("invalid passphrase")
+func createSaltHash(pass []byte) ([]byte, error) {
+	// generate a new salt
+	salt := make([]byte, vaultSaltSize)
+	_, err := rand.Reader.Read(salt)
+	if err != nil {
+		return nil, errgo.Mask(err)
 	}
 
-	return salt, isNew, nil
+	saltPath := filepath.Join(*homedirFlagVar, vaultSaltName)
+	f, err := os.OpenFile(saltPath, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	defer f.Close()
+
+	_, err = f.Write(salt)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	_, err = f.Write(hashVersion)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+
+	newHash := calcHash(pass, salt)
+	_, err = f.Write(newHash)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return salt, nil
+}
+
+func getSaltHash(pass []byte) ([]byte, []byte, error) {
+	saltPath := filepath.Join(*homedirFlagVar, vaultSaltName)
+	saltHash, err := ioutil.ReadFile(saltPath)
+	if err != nil {
+		return nil, nil, errgo.Mask(err, errgo.Any)
+	}
+	if len(saltHash) < 32+2+sha512.Size384 {
+		return nil, nil, errgo.New("invalid salt file")
+	}
+	return saltHash[:32], saltHash[34:], nil
+}
+
+func msgPush() error {
+	vault, err := newVault()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	contacts, err := newContacts()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	var keyPair *sf.KeyPair
+	if *msgPushSendArg == "" {
+		keyPair, err = vault.Current()
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	} else {
+		sendKey, err := contacts.Key(*msgPushSendArg)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+		keyPair, err = vault.Get(sendKey)
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+
+	rcptKey, err := contacts.Key(*msgPushRcptArg)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	var contents bytes.Buffer
+	f, err := os.Open(*msgPushContentsArg)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	_, err = io.Copy(&contents, f)
+	f.Close()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	client, err := newClient(keyPair)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+
+	err = client.Push(rcptKey.Encode(), contents.Bytes())
+	return errgo.Mask(err)
+}
+
+func newClient(keyPair *sf.KeyPair) (*sfhttp.Client, error) {
+	var err error
+	var serverKey *sf.PublicKey
+	if *serverKeyFlag == "" {
+		serverKey, err = sfhttp.PublicKey((*urlFlagVar).String(), nil)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	} else {
+		serverKey, err = sf.DecodePublicKey(*serverKeyFlag)
+		if err != nil {
+			return nil, errgo.Mask(err)
+		}
+	}
+
+	return sfhttp.NewClient(keyPair, (*urlFlagVar).String(), serverKey, &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}), nil
+}
+
+func msgPop() error {
+	vault, err := newVault()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	keyPair, err := vault.Current()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	client, err := newClient(keyPair)
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	msgs, err := client.Pop()
+	if err != nil {
+		return errgo.Mask(err)
+	}
+	for i, msg := range msgs {
+		_, err = fmt.Println(i, msg.ID, msg.Sender, string(msg.Contents))
+		if err != nil {
+			return errgo.Mask(err)
+		}
+	}
+	return nil
 }
 
 func notImplemented() error {
 	return errgo.New("not implemented yet")
 }
-
-var (
-	nameList = notImplemented
-	addrList = notImplemented
-	msgPush  = notImplemented
-	msgPop   = notImplemented
-)

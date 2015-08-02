@@ -1,8 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -10,6 +9,7 @@ import (
 
 	"github.com/boltdb/bolt"
 	"github.com/julienschmidt/httprouter"
+	"gopkg.in/alecthomas/kingpin.v2"
 	"gopkg.in/errgo.v1"
 	"gopkg.in/tomb.v2"
 
@@ -18,49 +18,21 @@ import (
 	boltstorage "github.com/cmars/shadowfax/storage/bolt"
 )
 
-type Config struct {
-	HTTPPort       int    `json:"http-port"`
-	HTTPSPort      int    `json:"https-port,omitempty"`
-	TLSCertFile    string `json:"tls-cert-file,omitempty"`
-	TLSKeyFile     string `json:"tls-key-file,omitempty"`
-	PublicKey      string `json:"public-key"`
-	PrivateKeyFile string `json:"private-key"`
-	BoltDBFile     string `json:"bolt-db-file,omitempty"`
-}
-
-func (c *Config) loadKeyPair() (sf.KeyPair, error) {
-	if c.PublicKey == "" {
-		return sf.NewKeyPair()
-	}
-	var fail sf.KeyPair
-
-	publicKey, err := sf.DecodePublicKey(c.PublicKey)
-	if err != nil {
-		return fail, errgo.Mask(err)
-	}
-	privateKey := new(sf.PrivateKey)
-	buf, err := ioutil.ReadFile(c.PrivateKeyFile)
-	if err != nil {
-		return fail, errgo.Mask(err)
-	}
-	copy(privateKey[:], buf)
-	return sf.KeyPair{PublicKey: publicKey, PrivateKey: privateKey}, nil
-}
+var (
+	httpFlag    = kingpin.Flag("http", "http port").Default(":8080").String()
+	httpsFlag   = kingpin.Flag("https", "https port").String()
+	certFlag    = kingpin.Flag("cert", "tls certificate").ExistingFile()
+	keyFlag     = kingpin.Flag("key", "tls keyfile").ExistingFile()
+	keypairFlag = kingpin.Flag("keypair", "curve25519 keypair file").Default("sfd.keypair").String()
+	dbFileFlag  = kingpin.Flag("dbfile", "path to database file").Default("sfd.db").String()
+)
 
 var (
-	osExit        = os.Exit
-	defaultConfig Config
-	boltOptions   = bolt.Options{
+	osExit      = os.Exit
+	boltOptions = bolt.Options{
 		Timeout: 30 * time.Second,
 	}
 )
-
-func init() {
-	defaultConfig = Config{
-		HTTPPort:   8080,
-		BoltDBFile: "sfd.db",
-	}
-}
 
 func die(err error) {
 	if err != nil {
@@ -76,31 +48,83 @@ func main() {
 }
 
 func run() error {
-	config := defaultConfig
-	boltDB, err := bolt.Open(config.BoltDBFile, 0600, &boltOptions)
+	kingpin.Parse()
+
+	db, err := newDB()
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	keyPair, err := config.loadKeyPair()
+	keyPair, err := loadKeyPair()
 	if err != nil {
 		return errgo.Mask(err)
 	}
-	service := boltstorage.NewService(boltDB)
+	service := boltstorage.NewService(db)
 	handler := sfhttp.NewHandler(keyPair, service)
 
 	r := httprouter.New()
 	handler.Register(r)
 
 	var t tomb.Tomb
-	if config.HTTPPort != 0 {
+	if *httpFlag != "" {
 		t.Go(func() error {
-			return http.ListenAndServe(fmt.Sprintf(":%d", config.HTTPPort), r)
+			return http.ListenAndServe(*httpFlag, r)
 		})
 	}
-	if config.HTTPSPort != 0 && config.TLSCertFile != "" && config.TLSKeyFile != "" {
+	if *httpsFlag != "" && *certFlag != "" && *keyFlag != "" {
 		t.Go(func() error {
-			return http.ListenAndServeTLS(fmt.Sprintf(":%d", config.HTTPSPort), config.TLSCertFile, config.TLSKeyFile, r)
+			return http.ListenAndServeTLS(*httpsFlag, *certFlag, *keyFlag, r)
 		})
 	}
+
+	log.Printf("public key: %s", keyPair.PublicKey.Encode())
 	return t.Wait()
+}
+
+func newDB() (*bolt.DB, error) {
+	db, err := bolt.Open(*dbFileFlag, 0600, &boltOptions)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return db, nil
+}
+
+func loadKeyPair() (*sf.KeyPair, error) {
+	f, err := os.Open(*keypairFlag)
+	if os.IsNotExist(err) {
+		return newKeyPair()
+	} else if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	defer f.Close()
+
+	var keyPair sf.KeyPair
+	keyPair.PublicKey = new(sf.PublicKey)
+	keyPair.PrivateKey = new(sf.PrivateKey)
+	_, err = io.ReadFull(f, keyPair.PublicKey[:])
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	_, err = io.ReadFull(f, keyPair.PrivateKey[:])
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return &keyPair, nil
+}
+
+func newKeyPair() (*sf.KeyPair, error) {
+	f, err := os.OpenFile(*keypairFlag, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0600)
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	defer f.Close()
+	kp, err := sf.NewKeyPair()
+	_, err = f.Write(kp.PublicKey[:])
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	_, err = f.Write(kp.PrivateKey[:])
+	if err != nil {
+		return nil, errgo.Mask(err)
+	}
+	return &kp, nil
 }
