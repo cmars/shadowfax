@@ -1,3 +1,11 @@
+/*
+  Copyright 2015 Casey Marshall.
+
+  This Source Code Form is subject to the terms of the Mozilla Public
+  License, v. 2.0. If a copy of the MPL was not distributed with this
+  file, You can obtain one at http://mozilla.org/MPL/2.0/.
+*/
+
 package shadowfax
 
 import (
@@ -40,9 +48,6 @@ func DecodePublicKey(s string) (*PublicKey, error) {
 	buf, err := basen.Base58.DecodeString(s)
 	if err != nil {
 		return nil, err
-	}
-	if len(buf) != 32 {
-		return nil, errgo.Newf("invalid key length %q", len(buf))
 	}
 	copy(publicKey[:], buf)
 	return &publicKey, nil

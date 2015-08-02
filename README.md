@@ -16,3 +16,10 @@ Currently HTTP is supported, but other transports may be added. Additional
 layers of security may be provided by the network protocol, but the underlying
 confidentiality of shadowfax messages does not rely upon it.
 
+# License
+
+Copyright 2015 Casey Marshall.
+
+This Source Code Form is subject to the terms of the [Mozilla Public License, v. 2.0](LICENSE).
+If a copy of the MPL was not distributed with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
