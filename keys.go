@@ -49,9 +49,6 @@ func DecodePublicKey(s string) (*PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	if len(buf) != 32 {
-		return nil, errgo.Newf("invalid key length %q", len(buf))
-	}
 	copy(publicKey[:], buf)
 	return &publicKey, nil
 }
