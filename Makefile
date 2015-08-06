@@ -3,7 +3,9 @@ BINARIES=$(GOPATH)/bin/sf $(GOPATH)/bin/sfd
 
 TOOLS=$(GOPATH)/bin/godeps $(GOPATH)/bin/basen
 
-all: $(BINARIES)
+all: deps install
+
+install: $(BINARIES)
 
 $(GOPATH)/bin/sf:
 	go install ./cmd/sf
@@ -22,8 +24,14 @@ $(GOPATH)/bin/godeps:
 $(GOPATH)/bin/basen:
 	go get gopkg.in/basen.v1/cmd/basen
 
-clean:
-	$(RM) $(GOPATH)/bin/sf $(TOOLS)
+test: deps install
+	./ftests/pushpop.bash
 
-.PHONY: all deps tools clean
+clean:
+	go clean ./...
+
+all-clean: clean
+	$(RM) $(BINARIES) $(TOOLS)
+
+.PHONY: all deps tools clean all-clean
 
